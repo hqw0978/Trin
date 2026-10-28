@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>A股市场广度 · TRIN手机版</title>
+<style>
+:root{color-scheme:dark;--bg:#080d17;--panel:#121b2b;--panel2:#182438;--line:#26364e;--muted:#91a3bc;--text:#eef4ff;--red:#ff6877;--green:#39d6a0;--amber:#ffca66;--blue:#76b7ff}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#0c1423,#080d17 35%);color:var(--text);font:15px/1.45 system-ui,-apple-system,sans-serif;padding:12px 12px 30px;max-width:760px;margin-inline:auto}
+header{padding:10px 4px 12px}
+h1{font-size:20px;line-height:1.2;margin:0 0 6px}
+.sub{color:var(--muted);font-size:12px;margin:4px 0}
+.tag{display:inline-block;border:1px solid #344761;border-radius:99px;padding:2px 7px;font-size:11px;color:#b9c8dc}
+.panel{background:linear-gradient(145deg,var(--panel),#101827);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.section-title{font-size:14px;font-weight:bold;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.metric{background:var(--panel2);border-radius:10px;padding:11px;min-width:0}
+.metric .label{color:var(--muted);font-size:12px}
+.metric .value{font-size:22px;font-weight:700;letter-spacing:-0.3px;margin:4px 0 2px}
+.metric .note{font-size:11px;color:var(--muted)}
+.red{color:var(--red)}
+.green{color:var(--green)}
+.amber{color:var(--amber)}
+.blue{color:var(--blue)}
+.bar{height:8px;border-radius:99px;overflow:hidden;background:#26354a;display:flex;margin:8px 0 4px}
+.bar .up{background:var(--red)}
+.bar .down{background:var(--green)}
+.bar .flat{background:#718096}
+.split{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
+.note-box{font-size:13px;color:#d7e3f5;background:#0b1422;border:1px solid #26364e;border-radius:10px;padding:12px}
+.note-box strong{color:#fff}
+.btn{width:100%;border:1px solid #3b5272;border-radius:9px;padding:10px;color:#eaf2ff;background:#1a2b43;font-size:13px}
+.pill{font-size:11px;padding:3px 7px;border-radius:99px;background:#26364e;color:#c6d5e9}
+.footer{color:#8293aa;font-size:11px;padding:6px 2px 0;margin-top:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>市场广度 TRIN（手机版）</h1>
+<div class="sub">A股全市场指标 <span class="tag">浏览器在线</span></div>
+<div class="sub" id="liveStatus">点下方按钮获取实时行情</div>
+</header>
+
+<section class="panel">
+<div class="section-title">市场总览 <span class="pill" id="sourceBadge">未连接</span></div>
+<button class="btn" id="liveBtn">🔄 获取实时行情</button>
+<div class="grid" style="margin-top:12px;">
+<div class="metric"><div class="label">上证指数</div><div class="value" id="idx">--</div><div class="note" id="idxNote">--</div></div>
+<div class="metric"><div class="label">上涨占比</div><div class="value" id="upPct">--</div><div class="note">样本 <span id="totalCnt">--</span>只</div></div>
+<div class="metric"><div class="label">TRIN</div><div class="value amber" id="trinCalc">--</div><div class="note">广度指标</div></div>
+<div class="metric"><div class="label">总成交额</div><div class="value" id="totalAmt">--</div><div class="note">亿元</div></div>
+</div>
+</section>
+
+<section class="panel">
+<div class="section-title">涨跌家数</div>
+<div class="grid">
+<div class="metric"><div class="label">上涨家数</div><div class="value red" id="advDisplay">0</div></div>
+<div class="metric"><div class="label">下跌家数</div><div class="value green" id="decDisplay">0</div></div>
+</div>
+<div class="bar"><div class="up" id="upBar" style="width:0%"></div><div class="down" id="downBar" style="width:0%"></div><div class="flat" id="flatBar" style="width:0%"></div></div>
+<div class="split">
+<span class="red">上涨 <b id="upPct2">0%</b></span>
+<span class="green">下跌 <b id="downPct">0%</b></span>
+<span>平盘 <b id="flatPct">0%</b></span>
+</div>
+</section>
+
+<section class="panel">
+<div class="section-title">状态解读</div>
+<div class="note-box" id="summary">点击【获取实时行情】拉取A股数据，计算TRIN广度。<br>⚠️仅供学习演示，不构成投资建议。接口来自东方财富公开网页数据。</div>
+</section>
+
+<div class="footer">
+说明：仅浏览器前端获取行情；不要高频点击；接口限流会连接失败；收盘后数据为静态收盘数据。
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+function fmt(n,d=3){return Number.isFinite(n)?n.toFixed(d):'—'}
+async function loadLiveData(){
+    const btn=$('liveBtn');
+    btn.disabled=true;
+    btn.textContent="⏳正在加载行情…";
+    $('liveStatus').textContent="请求行情中，请等待";
+    try{
+        const fs=encodeURIComponent('m:0+t:6,m:0+t:80,m:0+t:81,m:1+t:2,m:1+t:23');
+        const fields='f12,f14,f2,f3,f5,f6';
+        const cbName='cb_'+Date.now()+'_'+Math.floor(Math.random()*99999);
+        const url=`https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=${fs}&fields=${encodeURIComponent(fields)}&cb=${cbName}`;
+        await new Promise((resolve,reject)=>{
+            const script=document.createElement('script');
+            let done=false;
+            const timer=setTimeout(()=>{if(!done){done=true;script.remove();reject(new Error("请求超时"));}},12000);
+            window[cbName]=function(res){
+                if(done) return; done=true; clearTimeout(timer); script.remove();
+                if(res.rc!==0 || !res.data || !res.data.diff) return reject(new Error("接口返回异常"));
+                let adv=0,dec=0,flat=0,upVol=0,downVol=0,amount=0,valid=0;
+                for(const r of res.data.diff){
+                    const ch=Number(r.f3),vol=Number(r.f5),amt=Number(r.f6);
+                    if(!Number.isFinite(ch)) continue;
+                    valid++;
+                    if(ch>0){adv++;upVol+=Number.isFinite(vol)?vol:0;}
+                    else if(ch<0){dec++;downVol+=Number.isFinite(vol)?vol:0;}
+                    else flat++;
+                    if(Number.isFinite(amt)) amount+=amt;
+                }
+                if(valid<1000) return reject(new Error("有效股票数量过少"));
+                const total=adv+dec+flat;
+                const upPct=adv/total*100;
+                const downPct=dec/total*100;
+                const flatPct=flat/total*100;
+                const adRatio=adv/dec;
+                const volRatio=upVol/downVol;
+                const trin=adRatio/volRatio;
+                $('advDisplay').textContent=adv;
+                $('decDisplay').textContent=dec;
+                $('upPct').textContent=upPct.toFixed(2)+'%';
+                $('upPct2').textContent=upPct.toFixed(2)+'%';
+                $('downPct').textContent=downPct.toFixed(2)+'%';
+                $('flatPct').textContent=flatPct.toFixed(2)+'%';
+                $('upBar').style.width=upPct+'%';
+                $('downBar').style.width=downPct+'%';
+                $('flatBar').style.width=flatPct+'%';
+                $('trinCalc').textContent=fmt(trin);
+                $('totalCnt').textContent=valid;
+                $('totalAmt').textContent=(amount/100000000).toFixed(0);
+
+                const cb2='cbidx_'+Date.now();
+                const s=document.createElement('script');
+                s.src=`https://push2.eastmoney.com/api/qt/stock/get?secid=1.000001&fields=f43,f170&cb=${cb2}`;
+                window[cb2]=(idxRes)=>{
+                    if(idxRes?.data){
+                        const price=Number(idxRes.data.f43)/100;
+                        const chg=Number(idxRes.data.f170)/100;
+                        $('idx').textContent=price.toFixed(2);
+                        $('idxNote').textContent=(chg>0?"+":"")+chg.toFixed(2)+"%";
+                    }
+                    delete window[cb2];
+                    s.remove();
+                };
+                document.head.appendChild(s);
+
+                $('sourceBadge').textContent="✅行情已接入";
+                $('sourceBadge').style.color="#39d6a0";
+                const time=new Date().toLocaleString('zh-CN',{hour12:false});
+                $('liveStatus').textContent="更新时间："+time;
+
+                let tip="";
+                if(upPct<30) tip="⚠️市场广度极弱，普跌行情，TRIN<1也不能代表超卖";
+                else if(upPct<50) tip="⚠️广度偏弱，反弹需要上涨家数继续放大确认";
+                else tip="✅市场广度改善";
+                $('summary').innerHTML=`<strong>${tip}</strong><br>上涨${adv}家，下跌${dec}家；上涨占比${upPct.toFixed(2)}%；TRIN=${trin.toFixed(3)}。`;
+                resolve();
+            };
+            script.onerror=()=>{if(!done){done=true;clearTimeout(timer);script.remove();reject(new Error("网络加载失败"));}};
+            document.head.appendChild(script);
+        });
+    }catch(err){
+        $('liveStatus').textContent="❌失败："+err.message;
+        $('sourceBadge').textContent="连接失败";
+        $('sourceBadge').style.color="#ff6877";
+        $('summary').innerText="获取行情失败，可能是网络、接口限流；过一会再点。";
+    }finally{
+        btn.disabled=false;
+        btn.textContent="🔄 获取实时行情";
+    }
+}
+$('liveBtn').addEventListener('click',loadLiveData);
+</script>
+</body>
+</html>
