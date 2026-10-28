@@ -1,115 +1,77 @@
-
+import requests
 import json
-import re
 from datetime import datetime
-from pathlib import Path
-from zoneinfo import ZoneInfo
 
-import akshare as ak
-import pandas as pd
+def fetch():
+    url = (
+        "https://push2.eastmoney.com/api/qt/clist/get"
+        "?pn=1&pz=6000&po=1&np=1&fltt=2&invt=2&fid=f3"
+        "&fs=m:0+t:6,m:0+t:80,m:0+t:81,m:1+t:2,m:1+t:23"
+        "&fields=f12,f14,f2,f3,f5,f6"
+    )
+    headers = {
+        "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+        "Referer":"https://data.eastmoney.com/"
+    }
+    resp = requests.get(url, headers=headers, timeout=15)
+    data = resp.json()
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-DATA_DIR.mkdir(exist_ok=True)
+    adv = 0
+    dec = 0
+    flat = 0
+    up_vol = 0
+    down_vol = 0
+    amount = 0
 
-def main():
-    now = datetime.now(ZoneInfo("Asia/Shanghai"))
-    print(f"开始抓取 A 股行情：{now.isoformat()}")
+    for row in data['data']['diff']:
+        chg_pct = float(row['f3'])
+        vol = float(row['f5'])
+        amt = float(row['f6'])
+        amount += amt
+        if chg_pct > 0:
+            adv +=1
+            up_vol += vol
+        elif chg_pct < 0:
+            dec +=1
+            down_vol += vol
+        else:
+            flat +=1
 
-    # 请求一次全市场行情，避免重复请求增加限流风险
-    df = ak.stock_zh_a_spot_em()
+    total = adv + dec + flat
+    upPct = adv / total *100
+    downPct = dec / total *100
+    flatPct = flat / total *100
 
-    if df is None or df.empty:
-        raise RuntimeError("行情接口返回空数据")
+    ad_ratio = adv / dec
+    vol_ratio = up_vol / down_vol
+    trin = ad_ratio / vol_ratio
 
-    required = ["代码", "名称", "最新价", "涨跌幅", "成交量"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise RuntimeError(
-            f"行情字段发生变化，缺少：{missing}；"
-            f"实际字段：{list(df.columns)}"
-        )
-
-    df = df.copy()
-    df["代码"] = df["代码"].astype(str).str.strip()
-    df = df[df["代码"].str.fullmatch(r"\d{6}", na=False)]
-
-    for col in ["最新价", "涨跌幅", "成交量"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # 排除没有有效价格、涨跌幅或成交量的记录
-    df = df.dropna(subset=["最新价", "涨跌幅", "成交量"])
-    df = df[(df["最新价"] > 0) & (df["成交量"] >= 0)]
-
-    if len(df) < 1000:
-        raise RuntimeError(
-            f"有效股票仅 {len(df)} 只，数据可能不完整，拒绝发布"
-        )
-
-    up = df[df["涨跌幅"] > 0]
-    down = df[df["涨跌幅"] < 0]
-    flat = df[df["涨跌幅"] == 0]
-
-    up_vol = float(up["成交量"].sum())
-    down_vol = float(down["成交量"].sum())
-
-    trin = None
-    if len(up) and len(down) and up_vol > 0 and down_vol > 0:
-        trin = (len(up) / len(down)) / (up_vol / down_vol)
+    # 上证指数
+    idx_url = "https://push2.eastmoney.com/api/qt/stock/get?secid=1.000001&fields=f43,f170"
+    idx_resp = requests.get(idx_url,headers=headers,timeout=15)
+    idx_data = idx_resp.json()
+    idxPrice = float(idx_data['data']['f43'])/100
+    idxChgVal = float(idx_data['data']['f170'])/100
+    idxChg = f"{idxChgVal:+.2f}%"
 
     result = {
-        "date": now.strftime("%Y-%m-%d"),
-        "updated_at": now.isoformat(),
-        "source": "AkShare / Eastmoney",
-        "status": "ok",
-        "method": "按个股涨跌幅归类其成交量",
-        "volume_unit": "数据源原始单位，尚未独立核验",
-        "stock_count": int(len(df)),
-        "advancing_count": int(len(up)),
-        "declining_count": int(len(down)),
-        "unchanged_count": int(len(flat)),
-        "advancing_volume": up_vol,
-        "declining_volume": down_vol,
-        "volume_ratio_up_down": (
-            up_vol / down_vol if down_vol > 0 else None
-        ),
-        "trin": trin,
-        "warnings": [
-            "需核验全市场覆盖范围及成交量单位",
-            "涨跌幅按接口返回值分类，平盘单独统计",
-            "这不是逐笔主动买卖量"
-        ]
+        "adv":adv,
+        "dec":dec,
+        "flat":flat,
+        "total":total,
+        "upPct":upPct,
+        "downPct":downPct,
+        "flatPct":flatPct,
+        "trin":trin,
+        "totalAmt": amount / 100000000,
+        "idxPrice":idxPrice,
+        "idxChg": idxChg,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-
-    latest_path = DATA_DIR / "latest.json"
-    latest_path.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
-
-    history_path = DATA_DIR / "history.json"
-    history = []
-    if history_path.exists():
-        try:
-            history = json.loads(history_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            history = []
-
-    # 同一交易日重复运行时更新当日记录，不重复累加
-    history = [
-        item for item in history
-        if item.get("date") != result["date"]
-    ]
-    history.append(result)
-    history = sorted(history, key=lambda item: item["date"])[-365:]
-
-    history_path.write_text(
-        json.dumps(history, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
-
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    print("成功生成 data/latest.json 和 data/history.json")
+    with open("data.json","w",encoding="utf-8") as f:
+        json.dump(result,f,ensure_ascii=False,indent=2)
+    print("data.json generated successfully")
+    print(f"TRIN={trin:.3f}, up={adv}, down={dec}")
 
 if __name__ == "__main__":
-    main()
+    fetch()
