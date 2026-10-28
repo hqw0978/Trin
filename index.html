@@ -31,21 +31,21 @@ h1{font-size:20px;line-height:1.2;margin:0 0 6px}
 .split{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
 .note-box{font-size:13px;color:#d7e3f5;background:#0b1422;border:1px solid #26364e;border-radius:10px;padding:12px}
 .note-box strong{color:#fff}
+.footer{color:#8293aa;font-size:11px;padding:6px 2px 0;margin-top:12px}
 .btn{width:100%;border:1px solid #3b5272;border-radius:9px;padding:10px;color:#eaf2ff;background:#1a2b43;font-size:13px}
 .pill{font-size:11px;padding:3px 7px;border-radius:99px;background:#26364e;color:#c6d5e9}
-.footer{color:#8293aa;font-size:11px;padding:6px 2px 0;margin-top:12px}
 </style>
 </head>
 <body>
 <header>
 <h1>市场广度 TRIN（手机版）</h1>
-<div class="sub">A股全市场指标 <span class="tag">浏览器在线</span></div>
-<div class="sub" id="liveStatus">点下方按钮获取实时行情</div>
+<div class="sub">A股全市场指标 <span class="tag">后台抓取模式</span></div>
+<div class="sub" id="liveStatus">点击按钮读取后台抓取的数据</div>
 </header>
 
 <section class="panel">
-<div class="section-title">市场总览 <span class="pill" id="sourceBadge">未连接</span></div>
-<button class="btn" id="liveBtn">🔄 获取实时行情</button>
+<div class="section-title">市场总览 <span class="pill" id="sourceBadge">未加载</span></div>
+<button class="btn" id="liveBtn">🔄 读取行情数据</button>
 <div class="grid" style="margin-top:12px;">
 <div class="metric"><div class="label">上证指数</div><div class="value" id="idx">--</div><div class="note" id="idxNote">--</div></div>
 <div class="metric"><div class="label">上涨占比</div><div class="value" id="upPct">--</div><div class="note">样本 <span id="totalCnt">--</span>只</div></div>
@@ -70,102 +70,60 @@ h1{font-size:20px;line-height:1.2;margin:0 0 6px}
 
 <section class="panel">
 <div class="section-title">状态解读</div>
-<div class="note-box" id="summary">点击【获取实时行情】拉取A股数据，计算TRIN广度。<br>⚠️仅供学习演示，不构成投资建议。接口来自东方财富公开网页数据。</div>
+<div class="note-box" id="summary">点击【读取行情数据】加载后台抓取的A股TRIN指标。<br>⚠️仅供学习演示，不构成投资建议。</div>
 </section>
 
 <div class="footer">
-说明：仅浏览器前端获取行情；不要高频点击；接口限流会连接失败；收盘后数据为静态收盘数据。
+说明：数据由后台定时抓取；不是点击瞬间抓取，有一定更新间隔；不构成交易建议。
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
 function fmt(n,d=3){return Number.isFinite(n)?n.toFixed(d):'—'}
+
 async function loadLiveData(){
     const btn=$('liveBtn');
     btn.disabled=true;
-    btn.textContent="⏳正在加载行情…";
-    $('liveStatus').textContent="请求行情中，请等待";
+    btn.textContent="⏳加载数据…";
+    $('liveStatus').textContent="正在读取后台抓取结果";
     try{
-        const fs=encodeURIComponent('m:0+t:6,m:0+t:80,m:0+t:81,m:1+t:2,m:1+t:23');
-        const fields='f12,f14,f2,f3,f5,f6';
-        const cbName='cb_'+Date.now()+'_'+Math.floor(Math.random()*99999);
-        const url=`https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=${fs}&fields=${encodeURIComponent(fields)}&cb=${cbName}`;
-        await new Promise((resolve,reject)=>{
-            const script=document.createElement('script');
-            let done=false;
-            const timer=setTimeout(()=>{if(!done){done=true;script.remove();reject(new Error("请求超时"));}},12000);
-            window[cbName]=function(res){
-                if(done) return; done=true; clearTimeout(timer); script.remove();
-                if(res.rc!==0 || !res.data || !res.data.diff) return reject(new Error("接口返回异常"));
-                let adv=0,dec=0,flat=0,upVol=0,downVol=0,amount=0,valid=0;
-                for(const r of res.data.diff){
-                    const ch=Number(r.f3),vol=Number(r.f5),amt=Number(r.f6);
-                    if(!Number.isFinite(ch)) continue;
-                    valid++;
-                    if(ch>0){adv++;upVol+=Number.isFinite(vol)?vol:0;}
-                    else if(ch<0){dec++;downVol+=Number.isFinite(vol)?vol:0;}
-                    else flat++;
-                    if(Number.isFinite(amt)) amount+=amt;
-                }
-                if(valid<1000) return reject(new Error("有效股票数量过少"));
-                const total=adv+dec+flat;
-                const upPct=adv/total*100;
-                const downPct=dec/total*100;
-                const flatPct=flat/total*100;
-                const adRatio=adv/dec;
-                const volRatio=upVol/downVol;
-                const trin=adRatio/volRatio;
-                $('advDisplay').textContent=adv;
-                $('decDisplay').textContent=dec;
-                $('upPct').textContent=upPct.toFixed(2)+'%';
-                $('upPct2').textContent=upPct.toFixed(2)+'%';
-                $('downPct').textContent=downPct.toFixed(2)+'%';
-                $('flatPct').textContent=flatPct.toFixed(2)+'%';
-                $('upBar').style.width=upPct+'%';
-                $('downBar').style.width=downPct+'%';
-                $('flatBar').style.width=flatPct+'%';
-                $('trinCalc').textContent=fmt(trin);
-                $('totalCnt').textContent=valid;
-                $('totalAmt').textContent=(amount/100000000).toFixed(0);
+        const resp = await fetch("./data.json?"+Date.now());
+        if(!resp.ok) throw new Error("data.json不存在，请先手动运行一次Actions");
+        const res = await resp.json();
 
-                const cb2='cbidx_'+Date.now();
-                const s=document.createElement('script');
-                s.src=`https://push2.eastmoney.com/api/qt/stock/get?secid=1.000001&fields=f43,f170&cb=${cb2}`;
-                window[cb2]=(idxRes)=>{
-                    if(idxRes?.data){
-                        const price=Number(idxRes.data.f43)/100;
-                        const chg=Number(idxRes.data.f170)/100;
-                        $('idx').textContent=price.toFixed(2);
-                        $('idxNote').textContent=(chg>0?"+":"")+chg.toFixed(2)+"%";
-                    }
-                    delete window[cb2];
-                    s.remove();
-                };
-                document.head.appendChild(s);
+        $('advDisplay').textContent=res.adv;
+        $('decDisplay').textContent=res.dec;
+        $('upPct').textContent=res.upPct.toFixed(2)+'%';
+        $('upPct2').textContent=res.upPct.toFixed(2)+'%';
+        $('downPct').textContent=res.downPct.toFixed(2)+'%';
+        $('flatPct').textContent=res.flatPct.toFixed(2)+'%';
+        $('upBar').style.width=res.upPct+'%';
+        $('downBar').style.width=res.downPct+'%';
+        $('flatBar').style.width=res.flatPct+'%';
+        $('trinCalc').textContent=fmt(res.trin);
+        $('totalCnt').textContent=res.total;
+        $('totalAmt').textContent=res.totalAmt.toFixed(0);
+        $('idx').textContent = res.idxPrice?.toFixed(2)??"--";
+        $('idxNote').textContent = res.idxChg??"--";
 
-                $('sourceBadge').textContent="✅行情已接入";
-                $('sourceBadge').style.color="#39d6a0";
-                const time=new Date().toLocaleString('zh-CN',{hour12:false});
-                $('liveStatus').textContent="更新时间："+time;
+        $('sourceBadge').textContent="✅已加载";
+        $('sourceBadge').style.color="#39d6a0";
+        $('liveStatus').textContent="数据更新时间："+res.time;
 
-                let tip="";
-                if(upPct<30) tip="⚠️市场广度极弱，普跌行情，TRIN<1也不能代表超卖";
-                else if(upPct<50) tip="⚠️广度偏弱，反弹需要上涨家数继续放大确认";
-                else tip="✅市场广度改善";
-                $('summary').innerHTML=`<strong>${tip}</strong><br>上涨${adv}家，下跌${dec}家；上涨占比${upPct.toFixed(2)}%；TRIN=${trin.toFixed(3)}。`;
-                resolve();
-            };
-            script.onerror=()=>{if(!done){done=true;clearTimeout(timer);script.remove();reject(new Error("网络加载失败"));}};
-            document.head.appendChild(script);
-        });
+        let tip="";
+        if(res.upPct<30) tip="⚠️市场广度极弱，普跌行情";
+        else if(res.upPct<50) tip="⚠️广度偏弱，反弹需要上涨家数继续放大确认";
+        else tip="✅市场广度改善";
+        $('summary').innerHTML=`<strong>${tip}</strong><br>上涨${res.adv}家，下跌${res.dec}家；上涨占比${res.upPct.toFixed(2)}%；TRIN=${res.trin.toFixed(3)}。<br>仅供演示，不构成投资建议。`;
+
     }catch(err){
         $('liveStatus').textContent="❌失败："+err.message;
-        $('sourceBadge').textContent="连接失败";
+        $('sourceBadge').textContent="加载失败";
         $('sourceBadge').style.color="#ff6877";
-        $('summary').innerText="获取行情失败，可能是网络、接口限流；过一会再点。";
+        $('summary').innerText="读取data.json失败。请先去仓库Actions页面手动运行一次抓取，生成data.json文件。";
     }finally{
         btn.disabled=false;
-        btn.textContent="🔄 获取实时行情";
+        btn.textContent="🔄 读取行情数据";
     }
 }
 $('liveBtn').addEventListener('click',loadLiveData);
