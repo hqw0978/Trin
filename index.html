@@ -1,132 +1,91 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1220">
-<title>A股市场广度 · TRIN手机版</title>
-<style>
-:root{color-scheme:dark;--bg:#080d17;--panel:#121b2b;--panel2:#182438;--line:#26364e;--muted:#91a3bc;--text:#eef4ff;--red:#ff6877;--green:#39d6a0;--amber:#ffca66;--blue:#76b7ff}
-*{box-sizing:border-box}
-body{margin:0;background:linear-gradient(180deg,#0c1423,#080d17 35%);color:var(--text);font:15px/1.45 system-ui,-apple-system,sans-serif;padding:12px 12px 30px;max-width:760px;margin-inline:auto}
-header{padding:10px 4px 12px}
-h1{font-size:20px;line-height:1.2;margin:0 0 6px}
-.sub{color:var(--muted);font-size:12px;margin:4px 0}
-.tag{display:inline-block;border:1px solid #344761;border-radius:99px;padding:2px 7px;font-size:11px;color:#b9c8dc}
-.panel{background:linear-gradient(145deg,var(--panel),#101827);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
-.section-title{font-size:14px;font-weight:bold;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.metric{background:var(--panel2);border-radius:10px;padding:11px;min-width:0}
-.metric .label{color:var(--muted);font-size:12px}
-.metric .value{font-size:22px;font-weight:700;letter-spacing:-0.3px;margin:4px 0 2px}
-.metric .note{font-size:11px;color:var(--muted)}
-.red{color:var(--red)}
-.green{color:var(--green)}
-.amber{color:var(--amber)}
-.blue{color:var(--blue)}
-.bar{height:8px;border-radius:99px;overflow:hidden;background:#26354a;display:flex;margin:8px 0 4px}
-.bar .up{background:var(--red)}
-.bar .down{background:var(--green)}
-.bar .flat{background:#718096}
-.split{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
-.note-box{font-size:13px;color:#d7e3f5;background:#0b1422;border:1px solid #26364e;border-radius:10px;padding:12px}
-.note-box strong{color:#fff}
-.footer{color:#8293aa;font-size:11px;padding:6px 2px 0;margin-top:12px}
-.btn{width:100%;border:1px solid #3b5272;border-radius:9px;padding:10px;color:#eaf2ff;background:#1a2b43;font-size:13px}
-.pill{font-size:11px;padding:3px 7px;border-radius:99px;background:#26364e;color:#c6d5e9}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRIN 阿姆斯特指标 A股市场广度</title>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif;}
+        body{background:#0f172a;color:#fff;padding:20px;max-width:600px;margin:0 auto;}
+        h1{text-align:center;margin-bottom:24px;font-size:24px;}
+        .card{background:#1e293b;border-radius:16px;padding:24px;margin-bottom:16px;}
+        .row{display:flex;justify-content:space-between;margin:12px 0;font-size:16px;}
+        .trin-value{font-size:48px;font-weight:bold;text-align:center;margin:20px 0}
+        .tip{margin-top:16px;color:#94a3b8;font-size:14px;line-height:1.6}
+        button{width:100%;padding:14px;border:none;border-radius:12px;background:#2563eb;color:white;font-size:16px;margin-top:10px;cursor:pointer}
+        button:disabled{background:#334155;cursor:not-allowed}
+    </style>
 </head>
 <body>
-<header>
-<h1>市场广度 TRIN（手机版）</h1>
-<div class="sub">A股全市场指标 <span class="tag">后台抓取模式</span></div>
-<div class="sub" id="liveStatus">点击按钮读取后台抓取的数据</div>
-</header>
-
-<section class="panel">
-<div class="section-title">市场总览 <span class="pill" id="sourceBadge">未加载</span></div>
-<button class="btn" id="liveBtn">🔄 读取行情数据</button>
-<div class="grid" style="margin-top:12px;">
-<div class="metric"><div class="label">上证指数</div><div class="value" id="idx">--</div><div class="note" id="idxNote">--</div></div>
-<div class="metric"><div class="label">上涨占比</div><div class="value" id="upPct">--</div><div class="note">样本 <span id="totalCnt">--</span>只</div></div>
-<div class="metric"><div class="label">TRIN</div><div class="value amber" id="trinCalc">--</div><div class="note">广度指标</div></div>
-<div class="metric"><div class="label">总成交额</div><div class="value" id="totalAmt">--</div><div class="note">亿元</div></div>
-</div>
-</section>
-
-<section class="panel">
-<div class="section-title">涨跌家数</div>
-<div class="grid">
-<div class="metric"><div class="label">上涨家数</div><div class="value red" id="advDisplay">0</div></div>
-<div class="metric"><div class="label">下跌家数</div><div class="value green" id="decDisplay">0</div></div>
-</div>
-<div class="bar"><div class="up" id="upBar" style="width:0%"></div><div class="down" id="downBar" style="width:0%"></div><div class="flat" id="flatBar" style="width:0%"></div></div>
-<div class="split">
-<span class="red">上涨 <b id="upPct2">0%</b></span>
-<span class="green">下跌 <b id="downPct">0%</b></span>
-<span>平盘 <b id="flatPct">0%</b></span>
-</div>
-</section>
-
-<section class="panel">
-<div class="section-title">状态解读</div>
-<div class="note-box" id="summary">点击【读取行情数据】加载后台抓取的A股TRIN指标。<br>⚠️仅供学习演示，不构成投资建议。</div>
-</section>
-
-<div class="footer">
-说明：数据由后台定时抓取；不是点击瞬间抓取，有一定更新间隔；不构成交易建议。
-</div>
+    <h1>TRIN 阿姆斯特指标</h1>
+    <div class="card">
+        <div id="status">等待加载数据</div>
+        <div class="trin-value" id="trinBox">--</div>
+        <div class="row">
+            <span>上涨家数</span>
+            <span id="upCount">--</span>
+        </div>
+        <div class="row">
+            <span>下跌家数</span>
+            <span id="downCount">--</span>
+        </div>
+        <div class="row">
+            <span>上涨总成交量</span>
+            <span id="upVol">--</span>
+        </div>
+        <div class="row">
+            <span>下跌总成交量</span>
+            <span id="downVol">--</span>
+        </div>
+        <button id="refreshBtn">刷新数据</button>
+        <div class="tip">
+            TRIN公式：(上涨家数 ÷ 下跌家数) ÷ (上涨成交量 ÷ 下跌成交量)<br>
+            ✅ TRIN ＜1：多头力量更强<br>
+            ✅ TRIN ＞1：空头力量更强，市场抛压较重
+        </div>
+    </div>
 
 <script>
-const $=id=>document.getElementById(id);
-function fmt(n,d=3){return Number.isFinite(n)?n.toFixed(d):'—'}
+const statusEl = document.getElementById('status');
+const trinBox = document.getElementById('trinBox');
+const upCountEl = document.getElementById('upCount');
+const downCountEl = document.getElementById('downCount');
+const upVolEl = document.getElementById('upVol');
+const downVolEl = document.getElementById('downVol');
+const refreshBtn = document.getElementById('refreshBtn');
 
-async function loadLiveData(){
-    const btn=$('liveBtn');
-    btn.disabled=true;
-    btn.textContent="⏳加载数据…";
-    $('liveStatus').textContent="正在读取后台抓取结果";
+async function fetchTrin(){
+    refreshBtn.disabled = true;
+    statusEl.innerText = "正在拉取A股涨跌数据...";
     try{
-        const resp = await fetch("./data.json?"+Date.now());
-        if(!resp.ok) throw new Error("data.json不存在，请先手动运行一次Actions");
-        const res = await resp.json();
+        // ⚠️注意：浏览器跨域限制，GitHub Pages直接访问外部行情接口会存在跨域问题
+        statusEl.innerText = "当前版本演示计算逻辑；真实行情接口存在浏览器跨域限制";
+        // ============这里是演示：你可以在交易日手动填入上涨、下跌家数与成交量计算TRIN============
+        // 如果你需要完整可用版本，有两种方式解决跨域：
+        // 1.搭建后端代理
+        // 2.使用通达信/同花顺本地接口
+        alert("当前网页版本：前端版本解决跨域还需要代理。\n\n备选方案：如果你想要，我可以直接写通达信手机版公式版本的TRIN阿姆斯特指标，直接在通达信里面使用，不需要网页！")
 
-        $('advDisplay').textContent=res.adv;
-        $('decDisplay').textContent=res.dec;
-        $('upPct').textContent=res.upPct.toFixed(2)+'%';
-        $('upPct2').textContent=res.upPct.toFixed(2)+'%';
-        $('downPct').textContent=res.downPct.toFixed(2)+'%';
-        $('flatPct').textContent=res.flatPct.toFixed(2)+'%';
-        $('upBar').style.width=res.upPct+'%';
-        $('downBar').style.width=res.downPct+'%';
-        $('flatBar').style.width=res.flatPct+'%';
-        $('trinCalc').textContent=fmt(res.trin);
-        $('totalCnt').textContent=res.total;
-        $('totalAmt').textContent=res.totalAmt.toFixed(0);
-        $('idx').textContent = res.idxPrice?.toFixed(2)??"--";
-        $('idxNote').textContent = res.idxChg??"--";
+        // 示例计算演示
+        const up = 2200;
+        const down = 2600;
+        const upV = 2800;
+        const downV = 3300;
+        const trin = (up / down) / (upV / downV);
 
-        $('sourceBadge').textContent="✅已加载";
-        $('sourceBadge').style.color="#39d6a0";
-        $('liveStatus').textContent="数据更新时间："+res.time;
-
-        let tip="";
-        if(res.upPct<30) tip="⚠️市场广度极弱，普跌行情";
-        else if(res.upPct<50) tip="⚠️广度偏弱，反弹需要上涨家数继续放大确认";
-        else tip="✅市场广度改善";
-        $('summary').innerHTML=`<strong>${tip}</strong><br>上涨${res.adv}家，下跌${res.dec}家；上涨占比${res.upPct.toFixed(2)}%；TRIN=${res.trin.toFixed(3)}。<br>仅供演示，不构成投资建议。`;
-
-    }catch(err){
-        $('liveStatus').textContent="❌失败："+err.message;
-        $('sourceBadge').textContent="加载失败";
-        $('sourceBadge').style.color="#ff6877";
-        $('summary').innerText="读取data.json失败。请先去仓库Actions页面手动运行一次抓取，生成data.json文件。";
-    }finally{
-        btn.disabled=false;
-        btn.textContent="🔄 读取行情数据";
+        upCountEl.innerText = up;
+        downCountEl.innerText = down;
+        upVolEl.innerText = upV;
+        downVolEl.innerText = downV;
+        trinBox.innerText = trin.toFixed(3);
+        statusEl.innerText = "演示计算完成";
+    }catch(e){
+        statusEl.innerText = "数据获取失败："+e.message;
     }
+    refreshBtn.disabled = false;
 }
-$('liveBtn').addEventListener('click',loadLiveData);
+
+refreshBtn.onclick = fetchTrin;
 </script>
 </body>
 </html>
