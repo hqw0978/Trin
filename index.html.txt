@@ -96,7 +96,24 @@ async function loadLiveData(){
             const timer=setTimeout(()=>{if(!done){done=true;script.remove();reject(new Error("请求超时"));}},12000);
             window[cbName]=function(res){
                 if(done) return; done=true; clearTimeout(timer); script.remove();
-                if(res.rc!==0 || !res.data || !res.data.diff) return reject(new Error("接口返回异常"));
+              if (!res) {
+  return reject(new Error("接口未返回响应对象"));
+}
+if (res.rc !== 0) {
+  return reject(new Error(
+    "东方财富 rc=" + res.rc + "；" +
+    (res.message || res.msg || "接口拒绝或参数不符")
+  ));
+}
+if (!res.data) {
+  return reject(new Error("响应缺少 data 字段"));
+}
+if (!Array.isArray(res.data.diff)) {
+  return reject(new Error(
+    "响应缺少 diff 数组：" +
+    JSON.stringify(res.data).slice(0, 180)
+  ));
+}
                 let adv=0,dec=0,flat=0,upVol=0,downVol=0,amount=0,valid=0;
                 for(const r of res.data.diff){
                     const ch=Number(r.f3),vol=Number(r.f5),amt=Number(r.f6);
