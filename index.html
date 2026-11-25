@@ -40,7 +40,7 @@ h1{font-size:20px;line-height:1.2;margin:0 0 6px}
 <body>
 <header>
 <h1>市场广度 TRIN（手机版）</h1>
-<div class="sub">A股全市场指标 <span class="tag">10 分钟快照</span></div>
+<div class="sub">A股全市场指标 <span class="tag">半小时快照</span></div>
 <div class="sub" id="liveStatus">正在读取最新快照…</div>
 </header>
 
@@ -75,7 +75,7 @@ h1{font-size:20px;line-height:1.2;margin:0 0 6px}
 </section>
 
 <div class="footer">
-数据：新浪财经行情，沪深A股（不含北交所）。快照由 GitHub Actions 在交易日每 10 分钟生成；页面打开期间每 5 分钟自动拉取一次，也可以点按钮立即拉。<br>
+数据：新浪财经行情，沪深A股（不含北交所）。快照由 GitHub Actions 在交易时段生成，大约每半小时一次（刻意不做高频，免得把数据源用秃）；页面打开期间每 10 分钟自动拉一次，也可以点按钮立即拉。<br>
 仅供学习演示，不构成投资建议。
 </div>
 
@@ -155,7 +155,7 @@ $('liveBtn').addEventListener('click', refresh);
 loadSnapshot(false)
   .then(d => {
     render(d, 'snapshot');
-    $('liveStatus').textContent = '数据时间：' + (d.time || '未知') + '（交易日每 10 分钟自动更新）';
+    $('liveStatus').textContent = '数据时间：' + (d.time || '未知') + '（交易日约每半小时自动更新）';
   })
   .catch(() => {
     const c = readCache();
@@ -168,7 +168,7 @@ loadSnapshot(false)
     $('sourceBadge').textContent = '未连接';
   });
 
-// 打开着不动也会自己变新：每 5 分钟拉一次快照
+// 打开着不动也会自己变新：每 10 分钟拉一次快照
 setInterval(() => {
   if (document.visibilityState === 'visible') {
     loadSnapshot(true).then(d => {
@@ -176,7 +176,7 @@ setInterval(() => {
       $('liveStatus').textContent = '数据时间：' + (d.time || '未知');
     }).catch(() => {});
   }
-}, 5 * 60 * 1000);
+}, 10 * 60 * 1000);
 </script>
 </body>
 </html>
