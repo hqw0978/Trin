@@ -40,13 +40,13 @@ h1{font-size:20px;line-height:1.2;margin:0 0 6px}
 <body>
 <header>
 <h1>市场广度 TRIN（手机版）</h1>
-<div class="sub">A股全市场指标 <span class="tag">快照 + 实时</span></div>
+<div class="sub">A股全市场指标 <span class="tag">10 分钟快照</span></div>
 <div class="sub" id="liveStatus">正在读取最新快照…</div>
 </header>
 
 <section class="panel">
 <div class="section-title">市场总览 <span class="pill" id="sourceBadge">加载中</span></div>
-<button class="btn" id="liveBtn">🔄 获取实时行情</button>
+<button class="btn" id="liveBtn">🔄 获取最新数据</button>
 <div class="grid" style="margin-top:12px;">
 <div class="metric"><div class="label">上证指数</div><div class="value" id="idx">--</div><div class="note" id="idxNote">--</div></div>
 <div class="metric"><div class="label">上涨占比</div><div class="value" id="upPct">--</div><div class="note">样本 <span id="totalCnt">--</span>只</div></div>
@@ -75,7 +75,7 @@ h1{font-size:20px;line-height:1.2;margin:0 0 6px}
 </section>
 
 <div class="footer">
-数据：新浪财经行情，沪深A股（不含北交所），data.json 快照在交易日每 10 分钟更新；点按钮可尝试实时刷新东方财富接口。<br>
+数据：新浪财经行情，沪深A股（不含北交所）。快照由 GitHub Actions 在交易日每 10 分钟生成；页面打开期间每 5 分钟自动拉取一次，也可以点按钮立即拉。<br>
 仅供学习演示，不构成投资建议。
 </div>
 
@@ -109,22 +109,10 @@ function render(d, mode) {
           : up < 50 ? '⚠️ 广度偏弱，反弹需要上涨家数继续放大确认'
           : '✅ 市场广度改善';
   $('summary').innerHTML =
-    `<strong>${tip}</strong><br>上涨 ${d.adv} 家，下跌 ${d.dec} 家，平盘 ${d.flat} 家；上涨占比 ${up.toFixed(2)}%；TRIN=${trin.toFixed(3)}。<br>口径：${d.universe || '沪深A股（不含北交所）'}，共 ${total} 只。<br>抓取时间：${when}<br>仅供演示，不构成投资建议。`;
+    `<strong>${tip}</strong><br>上涨 ${d.adv} 家，下跌 ${d.dec} 家，平盘 ${d.flat} 家；上涨占比 ${up.toFixed(2)}%；TRIN=${trin.toFixed(3)}。<br>口径：${d.universe || '沪深A股（不含北交所）'}，共 ${total} 只。<br>数据时间：${when}<br>仅供演示，不构成投资建议。`;
 
-  $('sourceBadge').textContent = mode === 'live' ? '✅ 实时' : '📸 快照';
-  $('sourceBadge').style.color = mode === 'live' ? '#39d6a0' : '#76b7ff';
-}
-
-function snapshot() {
-  return fetch('data.json?t=' + Date.now(), { cache: 'no-store' })
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(d => {
-      if (!d || !Number(d.total)) throw new Error('快照为空');
-      render(d, 'snapshot');
-      $('liveStatus').textContent = '快照时间：' + (d.time || '未知');
-      localStorage.setItem(CACHE_KEY, JSON.stringify(d));
-      return d;
-    });
+  $('sourceBadge').textContent = mode === 'fresh' ? '🆕 刚刷新' : '📸 快照';
+  $('sourceBadge').style.color = mode === 'fresh' ? '#39d6a0' : '#76b7ff';
 }
 
 function readCache() {
@@ -135,119 +123,60 @@ function readCache() {
   return null;
 }
 
-// JSONP 拉一个东方财富接口，失败换下一个域名
-function jsonp(host, path, timeout) {
-  return new Promise((resolve, reject) => {
-    const cb = 'cb_' + Math.random().toString(36).slice(2);
-    const s = document.createElement('script');
-    let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true; delete window[cb]; s.remove();
-      reject(new Error('超时'));
-    }, timeout || 9000);
-    window[cb] = res => {
-      if (done) return;
-      done = true; clearTimeout(timer); s.remove(); delete window[cb];
-      resolve(res);
-    };
-    s.onerror = () => {
-      if (done) return;
-      done = true; clearTimeout(timer); s.remove(); delete window[cb];
-      reject(new Error('网络'));
-    };
-    s.src = `https://${host}${path}&cb=${cb}`;
-    document.head.appendChild(s);
-  });
+async function loadSnapshot(bust) {
+  const r = await fetch('data.json' + (bust ? '?t=' + Date.now() : ''), { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  if (!d || !Number(d.total)) throw new Error('快照为空');
+  localStorage.setItem(CACHE_KEY, JSON.stringify(d));
+  return d;
 }
 
-async function live() {
+async function refresh() {
   const btn = $('liveBtn');
   btn.disabled = true;
-  btn.textContent = '⏳ 正在请求实时行情…';
-  $('liveStatus').textContent = '请求行情中，请稍等';
-
-  const fs = encodeURIComponent('m:0+t:6,m:0+t:80,m:0+t:81,m:1+t:2,m:1+t:23');
-  // 只要涨跌幅、成交量、成交额，payload 比原来小一半
-  const path = `/api/qt/clist/get?pn=1&pz=6000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=${fs}&fields=f3,f5,f6`;
-  const hosts = ['push2.eastmoney.com', '1.push2.eastmoney.com', '7.push2.eastmoney.com', 'push2delay.eastmoney.com'];
-
-  // 四个域名同时打，谁先回用谁；全部失败最多等 8 秒
-  let res = null, lastErr = '';
+  btn.textContent = '⏳ 拉取最新快照…';
   try {
-    res = await Promise.any(hosts.map(h => jsonp(h, path, 8000).then(r => {
-      if (r && r.data && r.data.diff && r.data.diff.length) return r;
-      throw new Error('接口无数据');
-    })));
+    const d = await loadSnapshot(true);
+    render(d, 'fresh');
+    $('liveStatus').textContent = '已刷新，数据时间：' + (d.time || '未知');
   } catch (e) {
-    const errs = (e && e.errors) || [];
-    lastErr = errs.length ? errs.map(x => x.message).join('/') : '全部域名失败';
-  }
-
-  if (!res) {
     const c = readCache();
-    if (c) render(c, 'snapshot');
-    btn.disabled = false; btn.textContent = '🔄 获取实时行情';
-    $('liveStatus').textContent = '❌ 实时接口不可用（' + lastErr + '），仍显示上一份快照';
-    return;
+    if (c) { render(c, 'snapshot'); }
+    $('liveStatus').textContent = '❌ 刷新失败（' + e.message + '），仍显示上一份数据';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 获取最新数据';
   }
-
-  let adv = 0, dec = 0, flat = 0, upVol = 0, downVol = 0, amount = 0;
-  for (const r of res.data.diff) {
-    const ch = Number(r.f3), vol = Number(r.f5), amt = Number(r.f6);
-    if (!Number.isFinite(ch)) continue;
-    if (ch > 0) { adv++; if (Number.isFinite(vol)) upVol += vol; }
-    else if (ch < 0) { dec++; if (Number.isFinite(vol)) downVol += vol; }
-    else flat++;
-    if (Number.isFinite(amt)) amount += amt;
-  }
-  const total = adv + dec + flat;
-  if (!adv || !dec || !downVol) {
-    $('liveStatus').textContent = '❌ 实时数据不完整，继续显示快照';
-    btn.disabled = false; btn.textContent = '🔄 获取实时行情';
-    return;
-  }
-
-  const d = {
-    adv, dec, flat, total,
-    upPct: adv / total * 100,
-    downPct: dec / total * 100,
-    flatPct: flat / total * 100,
-    trin: (adv / dec) / (upVol / downVol),
-    totalAmt: amount / 100000000,
-    time: new Date().toLocaleString('zh-CN', { hour12: false })
-  };
-
-  try {
-    const idx = await jsonp(hosts[0], '/api/qt/stock/get?secid=1.000001&fields=f43,f170', 6000);
-    if (idx && idx.data && idx.data.f43) {
-      d.idxPrice = Number(idx.data.f43) / 100;
-      const chg = Number(idx.data.f170) / 100;
-      d.idxChg = (chg > 0 ? '+' : '') + chg.toFixed(2) + '%';
-    }
-  } catch (e) {
-    const keep = $('idx').textContent;
-    if (keep !== '--') d.idxPrice = Number(keep);
-  }
-
-  render(d, 'live');
-  localStorage.setItem(CACHE_KEY, JSON.stringify(d));
-  $('liveStatus').textContent = '实时更新：' + d.time;
-  btn.disabled = false;
-  btn.textContent = '🔄 获取实时行情';
 }
 
-$('liveBtn').addEventListener('click', live);
-snapshot().catch(() => {
-  const c = readCache();
-  if (c) {
-    render(c, 'snapshot');
-    $('liveStatus').textContent = '离线缓存：' + (c.time || '未知') + '（当前没连上 data.json）';
-    return;
+$('liveBtn').addEventListener('click', refresh);
+
+loadSnapshot(false)
+  .then(d => {
+    render(d, 'snapshot');
+    $('liveStatus').textContent = '数据时间：' + (d.time || '未知') + '（交易日每 10 分钟自动更新）';
+  })
+  .catch(() => {
+    const c = readCache();
+    if (c) {
+      render(c, 'snapshot');
+      $('liveStatus').textContent = '离线缓存：' + (c.time || '未知') + '（没连上 data.json）';
+      return;
+    }
+    $('liveStatus').textContent = '没有读到数据，点按钮重试';
+    $('sourceBadge').textContent = '未连接';
+  });
+
+// 打开着不动也会自己变新：每 5 分钟拉一次快照
+setInterval(() => {
+  if (document.visibilityState === 'visible') {
+    loadSnapshot(true).then(d => {
+      render(d, 'snapshot');
+      $('liveStatus').textContent = '数据时间：' + (d.time || '未知');
+    }).catch(() => {});
   }
-  $('liveStatus').textContent = '没有读到快照，点按钮试实时行情';
-  $('sourceBadge').textContent = '未连接';
-});
+}, 5 * 60 * 1000);
 </script>
 </body>
 </html>
